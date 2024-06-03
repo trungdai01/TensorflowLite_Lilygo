@@ -30,7 +30,7 @@
 
 #include "../include/global.h"
 
-#define ALREADYTRAINED
+// #define ALREADYTRAINED
 
 #ifdef ALREADYTRAINED
 // #include <TensorFlowLite_ESP32.h>
@@ -44,17 +44,17 @@
 
 namespace TFModel
 {  // global variables used for TensorFlow Lite (Micro)
-    tflite::ErrorReporter *tflErrorReporter = NULL;
+    tflite::ErrorReporter* tflErrorReporter = NULL;
 
     // pull in all the TFLM ops, you can remove this line and
     // only pull in the TFLM ops you need, if would like to reduce
     // the compiled size of the sketch.
     static tflite::AllOpsResolver resolver;
 
-    const tflite::Model *tflModel = nullptr;
-    tflite::MicroInterpreter *tflInterpreter = nullptr;
-    TfLiteTensor *tflInputTensor = nullptr;
-    TfLiteTensor *tflOutputTensor = nullptr;
+    const tflite::Model* tflModel = nullptr;
+    tflite::MicroInterpreter* tflInterpreter = nullptr;
+    TfLiteTensor* tflInputTensor = nullptr;
+    TfLiteTensor* tflOutputTensor = nullptr;
 
     // Create a static memory buffer for TFLM, the size may need to
     // be adjusted based on the model you are using
@@ -63,16 +63,16 @@ namespace TFModel
 }  // namespace TFModel
 
 // array to map gesture index to a name
-const char *GESTURES[] = {"punch", "flex"};
+const char* GESTURES[] = {"punch", "flex"};
 
 // #define NUM_GESTURES (sizeof(GESTURES) / sizeof(GESTURES[0]))
 #define NUM_GESTURES 2
 
 #endif
 
-TTGOClass *watch;
-TFT_eSPI *tft;
-BMA *sensor;
+TTGOClass* watch;
+TFT_eSPI* tft;
+BMA* sensor;
 
 void setup()
 {
@@ -200,7 +200,9 @@ void setup()
     }
 
     // Create an interpreter to run the model
-    TFModel::tflInterpreter = new tflite::MicroInterpreter(TFModel::tflModel, micro_mutable_op_resolver, TFModel::tensorArena, TFModel::tensorArenaSize, TFModel::tflErrorReporter);
+    TFModel::tflInterpreter =
+        new tflite::MicroInterpreter(TFModel::tflModel, micro_mutable_op_resolver, TFModel::tensorArena,
+                                     TFModel::tensorArenaSize, TFModel::tflErrorReporter);
 
     // Allocate memory for the model's input and output tensors
     TFModel::tflInterpreter->AllocateTensors();
@@ -242,7 +244,6 @@ void loop()
     // wait for significant motion
     while (samplesRead == numSamples)
     {
-        // ArduinoOTA.handle();
         bool res = sensor->getAccel(acc);
         if (res)
         {
@@ -263,7 +264,8 @@ void loop()
             if ((millis() - lastReadingDone) > 5000)
             {
                 // compare to last reading
-                if ((abs(cxpos - acc.x) > accelerationThreshold) || (abs(cypos - acc.y) > accelerationThreshold) || (abs(czpos - acc.z) > accelerationThreshold))
+                if ((abs(cxpos - acc.x) > accelerationThreshold) || (abs(cypos - acc.y) > accelerationThreshold) ||
+                    (abs(czpos - acc.z) > accelerationThreshold))
                 {
                     // reset the sample read count
                     samplesRead = 0;
@@ -277,6 +279,7 @@ void loop()
                     if (isWaiting == false)
                     {
                         isWaiting = true;
+                        Serial.print("Waiting\n");
                         tft->drawString("Waiting....", 25, 50, 4);
                     }
                 }
@@ -293,125 +296,31 @@ void loop()
     while (samplesRead < numSamples)
     {
         bool res = sensor->getAccel(acc);
-        // check if both new acceleration and gyroscope data is
-        // available
         if (res)
         {
-            // read the acceleration and gyroscope data
             cxpos = acc.x;
             cypos = acc.y;
             czpos = acc.z;
-
-#ifdef ALREADYTRAINED
-            // normalize the IMU data between 0 to 1 and store in the model's
-            // input tensor
-            TFModel::tflInputTensor->data.f[samplesRead * 3 + 0] = (cxpos + 2048.0) / 4096.0;
-            TFModel::tflInputTensor->data.f[samplesRead * 3 + 1] = (cypos + 2048.0) / 4096.0;
-            TFModel::tflInputTensor->data.f[samplesRead * 3 + 2] = (czpos + 2048.0) / 4096.0;
-            // TFModel::tflInputTensor->data.i16[samplesRead * 3 + 0] = cxpos + 2048.0;
-            // TFModel::tflInputTensor->data.i16[samplesRead * 3 + 1] = cypos + 2048.0;
-            // TFModel::tflInputTensor->data.i16[samplesRead * 3 + 2] = czpos + 2048.0;
-#endif
-            Serial.print(TFModel::tflInputTensor->data.f[samplesRead * 3 + 0]);
+            Serial.print(cxpos);
             Serial.print(',');
-            Serial.print(TFModel::tflInputTensor->data.f[samplesRead * 3 + 1]);
+            Serial.print(cypos);
             Serial.print(',');
-            Serial.print(TFModel::tflInputTensor->data.f[samplesRead * 3 + 2]);
-            Serial.print(',');
-            Serial.print(samplesRead * 3 + 0);
-            Serial.print(',');
-            Serial.print(samplesRead * 3 + 1);
-            Serial.print(',');
-            Serial.print(samplesRead * 3 + 2);
+            Serial.print(czpos);
             Serial.println();
 
             samplesRead++;
 
             if (samplesRead == numSamples)
             {
-#ifdef ALREADYTRAINED
-                // Run inferencing
-                TfLiteStatus invokeStatus = TFModel::tflInterpreter->Invoke();
-                if (invokeStatus != kTfLiteOk)
-                {
-                    Serial.println("Invoke failed!");
-                    while (1)
-                        ;
-                }
-                int bestAnswer = -1;
-                // Loop through the output tensor values from the model
-                // for (int i = 0; i < 357; i++){
-                    for (int i = 0; i < NUM_GESTURES; i++)
-                    {
-                        Serial.print(GESTURES[i]);
-                        Serial.print(": ");
-                        Serial.print(TFModel::tflOutputTensor->data.i16[outputCount * NUM_GESTURES + i]);
-                        Serial.print(" ");
-                        Serial.println((TFModel::tflOutputTensor->data.i16[outputCount * NUM_GESTURES + i] + 2048.0) / 4096.0);
-                        Serial.print(" outputCount: ");
-                        Serial.println(outputCount);
-                        if (((TFModel::tflOutputTensor->data.i16[outputCount * NUM_GESTURES + i] + 2048.0) / 4096.0) > 0.95)
-                        {
-                            bestAnswer = i;
-                            break;
-                        }
-                    }
-                // }
-
-                outputCount++;
-                if (bestAnswer > -1)
-                {
-                    Serial.print("*** I Think it was a ");
-                    Serial.print(GESTURES[bestAnswer]);
-                    Serial.println("***");
-                    // MicroDebug.sendUserMessage(GESTURES[bestAnswer]);
-                    tft->fillScreen(TFT_BLACK);
-                    tft->setTextColor(TFT_GREEN);
-                    tft->drawString(GESTURES[bestAnswer], 25, 50, 4);
-                    lastReadingDone = millis();
-                }
-                else
-                {
-                    tft->fillScreen(TFT_BLACK);
-                    tft->setTextColor(TFT_GREEN);
-                    tft->drawString("  ???   ", 25, 50, 4);
-                    // Dont update last reading so re-assesses as fast as
-                    // possible
-                }
-#else
-
                 tft->fillScreen(TFT_BLACK);
                 tft->setTextColor(TFT_RED, TFT_BLACK);
                 tft->drawString(" !WAIT! ", 25, 50, 4);
                 lastReadingDone = millis();
-#endif
-
                 // add an empty line if it's the last sample
                 Serial.println();
                 delay(100);
-                // MicroDebug.sendUserMessage("\n");
             }
         }
+        delay(10);
     }
-    // unsigned long start_timestamp = micros();
-    // float x_val = 1.2;
-
-    // TFModel::tflInputTensor->data.f[0] = 2000;
-    // TFModel::tflInputTensor->data.f[1] = 1000;
-    // TFModel::tflInputTensor->data.f[2] = 9;
-
-    // TfLiteStatus invoke_status = TFModel::tflInterpreter->Invoke();
-    // if (invoke_status != kTfLiteOk)
-    // {
-    //     TFModel::tflErrorReporter->Report("Invoke failed on input: %f\n", x_val);
-    // }
-
-    // float y_val = TFModel::tflOutputTensor->data.f[0];
-
-    // Serial.println(y_val);
-
-    // Serial.print("Time for inference (us): ");
-    // Serial.println(micros() - start_timestamp);
-
-    // delay(5000);
 }
